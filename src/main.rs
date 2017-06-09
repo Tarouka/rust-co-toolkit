@@ -6,9 +6,13 @@ use std::process::Command;
 use std::collections::HashMap;
 
 use std::io::Cursor;
+use std::env;
 
 extern crate nom;
 extern crate byteorder;
+extern crate clap;
+
+use clap::{Arg, App, SubCommand, ArgMatches};
 
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use maps::*;
@@ -18,13 +22,29 @@ mod levelexp;
 mod maps;
 
 
-fn usage() {
-    println!("")
+fn get_app_usage<'a>() -> ArgMatches<'a> {
+    App::new("CO V5165 Toolkit")
+        .version("0.1.0")
+        .author("Tarouka <tarouka@openmailbox.org>")
+        .subcommand(SubCommand::with_name("decrypt_dat")
+            .about("Decrypts a standard CO dat file.")
+            .arg(Arg::with_name("SRC_FILENAME").help("Source filename").required(true))
+            .arg(Arg::with_name("DST_FILENAME").help("Destination filename").required(true))
+        )
+        .get_matches()
+
 }
 
 
 fn main() {
-    read_all_maps();
+    let matches = get_app_usage();
+
+    if let Some(matches) = matches.subcommand_matches("decrypt_dat") {
+        prepare_decrypt_dat(&matches);
+    }
+
+
+    /*read_all_maps();
 
     let initial_file = "";
     let target_file = "";
@@ -32,8 +52,38 @@ fn main() {
     // decrypt(initial_file, target_file);
 
     let mut stdin = io::stdin();
-    let _ = stdin.read(&mut [0u8]).unwrap();
+    let _ = stdin.read(&mut [0u8]).unwrap();*/
 }
+
+fn prepare_decrypt_dat<'a>(matches: &'a ArgMatches) {
+    let src_filename = matches.value_of("SRC_FILENAME").unwrap();
+    let dst_filename = matches.value_of("DST_FILENAME").unwrap();
+
+    exec_decrypt_dat(&src_filename, &dst_filename);
+}
+
+fn exec_decrypt_dat(source: &str, dest: &str) {
+    let cofac_key = datfiles::generate_cofac_key();
+    println!("Generated COFAC key successfully!");
+
+    let bytes_read = read_all_bytes(source);
+    println!("File successfully read.");
+
+    let bytes_dec = datfiles::decrypt_bytes(&bytes_read, &cofac_key);
+    println!("Decryption complete.");
+
+    write_all_bytes(dest, bytes_dec);
+    println!("Wrote decrypted file to {} successfully.", dest);
+
+
+    //let level_file = levelexp::LevelExpFile { filename: String::from(source) };
+    //let levels = level_file.get_levels();
+    // let levels_hash = level_file.get_levels_as_map();
+    // print_levelup(&levels);
+    // print_levelup_hash(&levels_hash);
+}
+
+
 
 fn read_all_maps() {
     let maps_folder = "";
@@ -89,18 +139,6 @@ fn read_all_maps() {
 
     println!("Total accessible cells: {}", counter_accessible);
     println!("Total inaccessible cells: {}", counter_inaccessible);
-}
-
-fn decrypt(source: &str, dest: &str) {
-    // let cofac_key = datfiles::generate_cofac_key();
-    // let bytes_read = read_all_bytes(source);
-    let level_file = levelexp::LevelExpFile { filename: String::from(source) };
-    let levels = level_file.get_levels();
-    let levels_hash = level_file.get_levels_as_map();
-    // print_levelup(&levels);
-    print_levelup_hash(&levels_hash);
-    // let bytes_dec = decrypt_bytes(bytes_read, cofac_key);
-    // write_all_bytes(dest, bytes_dec);
 }
 
 

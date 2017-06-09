@@ -1,6 +1,6 @@
 const COFAC_BASE_SEED: i16 = 0x2537;
 
-fn decrypt_bytes(bytes_enc: &Vec<u8>, key: &[u8; 128]) -> Vec<u8> {
+pub fn decrypt_bytes(bytes_enc: &Vec<u8>, key: &[u8; 128]) -> Vec<u8> {
     let mut bytes_dec = Vec::new();
 
     for b in 0..bytes_enc.len() {
