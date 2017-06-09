@@ -1,0 +1,8 @@
+[package]
+name = "toolkit"
+version = "0.1.0"
+authors = ["tarouka"]
+
+[dependencies]
+byteorder = "1.0.0"
+nom = "^3.0"
