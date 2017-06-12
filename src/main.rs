@@ -42,6 +42,12 @@ fn get_app_usage<'a>() -> ArgMatches<'a> {
             .arg(Arg::with_name("DST_FILENAME").help("Destination filename").required(true))
         )
 
+        .subcommand(SubCommand::with_name("encrypt_dat")
+            .about("Encrypts a standard CO dat file (itemtype.dat, Monster.dat or MagicType.dat).")
+            .arg(Arg::with_name("SRC_FILENAME").help("Source filename").required(true))
+            .arg(Arg::with_name("DST_FILENAME").help("Destination filename").required(true))
+        )
+
         .subcommand(SubCommand::with_name("itemtype")
             .subcommand(SubCommand::with_name("decode")
                 .about("Decodes an itemtype.dat file to a more workable format.")
@@ -74,6 +80,10 @@ fn main() {
         prepare_decrypt_dat(&matches);
     }
 
+    if let Some(matches) = matches.subcommand_matches("encrypt_dat") {
+        prepare_encrypt_dat(&matches);
+    }
+
     if let Some(matches) = matches.subcommand_matches("itemtype") {
         if let Some(matches) = matches.subcommand_matches("decode") {
             prepare_itemtype_decode(&matches);
@@ -104,6 +114,27 @@ fn exec_decrypt_dat(source: &str, dest: &str) {
 
     write_all_bytes(dest, bytes_dec);
     println!("Wrote decrypted file to {} successfully.", dest);
+}
+
+fn prepare_encrypt_dat<'a>(matches: &'a ArgMatches) {
+    let src_filename = matches.value_of("SRC_FILENAME").unwrap();
+    let dst_filename = matches.value_of("DST_FILENAME").unwrap();
+
+    exec_encrypt_dat(&src_filename, &dst_filename);
+}
+
+fn exec_encrypt_dat(source: &str, dest: &str) {
+    let cofac_key = datfiles::generate_cofac_key();
+    println!("Generated COFAC key successfully!");
+
+    let bytes_read = read_all_bytes(source);
+    println!("File successfully read.");
+
+    let bytes_dec = datfiles::encrypt_bytes(&bytes_read, &cofac_key);
+    println!("Encryption complete.");
+
+    write_all_bytes(dest, bytes_dec);
+    println!("Wrote encrypted file to {} successfully.", dest);
 }
 
 fn prepare_itemtype_decode<'a>(matches: &'a ArgMatches) {
