@@ -12,6 +12,7 @@ use std::str;
 use std::io::Cursor;
 use std::env;
 
+#[macro_use]
 extern crate nom;
 extern crate byteorder;
 extern crate clap;
@@ -29,6 +30,7 @@ use itemtype::parser::ParserSerializable;
 mod datfiles;
 mod levelexp;
 mod itemtype;
+mod magictype;
 
 
 fn get_app_usage<'a>() -> ArgMatches<'a> {
@@ -49,6 +51,8 @@ fn get_app_usage<'a>() -> ArgMatches<'a> {
         )
 
         .subcommand(SubCommand::with_name("itemtype")
+            .about("Encodes or decodes an itemtype file to a parseable format.")
+            
             .subcommand(SubCommand::with_name("decode")
                 .about("Decodes an itemtype.dat file to a more workable format.")
 
@@ -80,11 +84,11 @@ fn main() {
         prepare_decrypt_dat(&matches);
     }
 
-    if let Some(matches) = matches.subcommand_matches("encrypt_dat") {
+    else if let Some(matches) = matches.subcommand_matches("encrypt_dat") {
         prepare_encrypt_dat(&matches);
     }
 
-    if let Some(matches) = matches.subcommand_matches("itemtype") {
+    else if let Some(matches) = matches.subcommand_matches("itemtype") {
         if let Some(matches) = matches.subcommand_matches("decode") {
             prepare_itemtype_decode(&matches);
         }
@@ -92,6 +96,10 @@ fn main() {
         if let Some(matches) = matches.subcommand_matches("encode") {
             prepare_itemtype_encode(&matches);
         }
+    }
+
+    else {
+        println!("{}", matches.usage());
     }
 }
 

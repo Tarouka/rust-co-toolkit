@@ -40,3 +40,64 @@ pub fn generate_cofac_key() -> [u8; 128] {
 
     key
 }
+
+#[macro_use]
+pub mod parser {
+    use nom::not_line_ending;
+    use std::str;
+
+    #[macro_export]
+    named!(pub parse_str_fragment_crlfeof<&[u8], String>, do_parse!(
+        str_val: map_res!(not_line_ending, str::from_utf8) >>
+        (String::from(str_val))
+    ));
+
+    #[macro_export]
+    named!(pub parse_str_fragment<&[u8], String>, do_parse!(
+        str_val: map_res!(take_until!(" "), str::from_utf8)      >>
+        take!(1)    >>
+        (String::from(str_val))
+    ));
+
+    #[macro_export]
+    macro_rules! parse_str_fragment_to_type (
+        ( $i:expr, $type:ty ) => ({
+            do_parse!($i,
+                str_val: parse_str_fragment             >>
+                (str_val.parse::<$type>().unwrap())
+            )
+        })
+    );
+
+    #[macro_export]
+    macro_rules! parse_str_fragment_to_type_crlfeof (
+        ( $i:expr, $type:ty ) => ({
+            do_parse!($i,
+                str_val: parse_str_fragment_crlfeof             >>
+                (str_val.parse::<$type>().unwrap())
+            )
+        })
+    );
+
+
+    #[macro_export]
+    named!(pub parse_str_fragment_to_u8<&[u8], u8>, parse_str_fragment_to_type!(u8));
+    named!(pub parse_str_fragment_to_u16<&[u8], u16>, parse_str_fragment_to_type!(u16));
+    named!(pub parse_str_fragment_to_u32<&[u8], u32>, parse_str_fragment_to_type!(u32));
+    named!(pub parse_str_fragment_to_i32<&[u8], i32>, parse_str_fragment_to_type!(i32));
+
+    named!(pub parse_str_fragment_crlfeof_to_u8<&[u8], u8>, parse_str_fragment_to_type_crlfeof!(u8));
+    named!(pub parse_str_fragment_crlfeof_to_u32<&[u8], u32>, parse_str_fragment_to_type_crlfeof!(u32));
+
+    pub fn remove_tildes_from(input: String) -> String {
+        let result = str::replace(&input, "~", " ");
+
+        result
+    }
+
+    pub fn append_tildes_to(input: String) -> String {
+        let result = str::replace(&input, " ", "~");
+
+        result
+    }
+}

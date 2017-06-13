@@ -110,60 +110,11 @@ pub struct ItemTypeEntry {
 }
 
 pub mod parser {
-	use super::*;
+	use super::{ItemTypeEntry, ItemTypeHeader, ItemType};
+	use datfiles::parser::*;
 
-	use std::str::from_utf8;
-	use nom::*;
-
-	named!(parse_str_fragment_crlfeof<&[u8], String>, do_parse!(
-		str_val: map_res!(not_line_ending, from_utf8) >>
-        (String::from(str_val))
-    ));
-
-
-	named!(parse_str_fragment<&[u8], String>, do_parse!(
-		str_val: map_res!(take_until!(" "), from_utf8)		>>
-		take!(1)	>>
-        (String::from(str_val))
-    ));
-
-    macro_rules! parse_str_fragment_to_type (
-    	( $i:expr, $type:ty ) => ({
-    		do_parse!($i,
-    			str_val: parse_str_fragment				>>
-    			(str_val.parse::<$type>().unwrap())
-			)
-		})
-	);
-
-	macro_rules! parse_str_fragment_to_type_crlfeof (
-    	( $i:expr, $type:ty ) => ({
-    		do_parse!($i,
-    			str_val: parse_str_fragment_crlfeof				>>
-    			(str_val.parse::<$type>().unwrap())
-			)
-		})
-	);
-
-    named!(parse_str_fragment_to_u8<&[u8], u8>, parse_str_fragment_to_type!(u8));
-    named!(parse_str_fragment_to_u16<&[u8], u16>, parse_str_fragment_to_type!(u16));
-    named!(parse_str_fragment_to_u32<&[u8], u32>, parse_str_fragment_to_type!(u32));
-    named!(parse_str_fragment_to_i32<&[u8], i32>, parse_str_fragment_to_type!(i32));
-
-    named!(parse_str_fragment_crlfeof_to_u8<&[u8], u8>, parse_str_fragment_to_type_crlfeof!(u8));
-    named!(parse_str_fragment_crlfeof_to_u32<&[u8], u32>, parse_str_fragment_to_type_crlfeof!(u32));
-
-    fn remove_tildes_from(input: String) -> String {
-    	let result = str::replace(&input, "~", " ");
-
-    	result
-    }
-
-    fn append_tildes_to(input: String) -> String {
-    	let result = str::replace(&input, " ", "~");
-
-		result
-    }
+	use nom::IResult;
+	use nom::IResult::Done;
 
     pub trait ParserSerializable {
     	fn serialize_to_string(&self) -> String;
@@ -456,8 +407,7 @@ pub mod parser {
 
 	#[cfg(test)]
 	mod tests {
-		use super::{item_type_header, item_type_entry};
-		use super::parser::ParserSerializable;
+		use super::{item_type_header, item_type_entry, ParserSerializable};
 
 		macro_rules! assert_header_amount_eq {
 			( $str_to_parse:expr, $expected:expr ) => ({
