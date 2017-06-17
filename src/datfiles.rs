@@ -43,51 +43,89 @@ pub fn generate_cofac_key() -> [u8; 128] {
 
 #[macro_use]
 pub mod parser {
-    use nom::not_line_ending;
+    use nom::{not_line_ending, IResult, ErrorKind};
     use std::str;
 
-    #[macro_export]
     named!(pub parse_str_fragment_crlfeof<&[u8], String>, do_parse!(
         str_val: map_res!(not_line_ending, str::from_utf8) >>
         (String::from(str_val))
     ));
 
-    #[macro_export]
     named!(pub parse_str_fragment<&[u8], String>, do_parse!(
         str_val: map_res!(take_until!(" "), str::from_utf8)      >>
         take!(1)    >>
         (String::from(str_val))
     ));
 
-    #[macro_export]
     macro_rules! parse_str_fragment_to_type (
         ( $i:expr, $type:ty ) => ({
             do_parse!($i,
                 str_val: parse_str_fragment             >>
-                (str_val.parse::<$type>().unwrap())
+                parsed_val: expr_res!(str_val.parse::<$type>()) >>
+
+                (parsed_val)
             )
         })
     );
 
-    #[macro_export]
     macro_rules! parse_str_fragment_to_type_crlfeof (
         ( $i:expr, $type:ty ) => ({
             do_parse!($i,
                 str_val: parse_str_fragment_crlfeof             >>
-                (str_val.parse::<$type>().unwrap())
+                (str_val.parse::<$type>().unwrap_or_default())
             )
         })
     );
 
+    #[macro_export]
+    macro_rules! serializer_append_field_as_bool {
+        ( $item_type: expr, $str: expr, $field: ident ) => ({
+            $str.push_str(if $item_type.$field { "1" } else { "0" });
+            $str.push_str(" ");
+        })
+    }
 
     #[macro_export]
+    macro_rules! serializer_append_field {
+        ( $item_type: expr, $str: expr, $field: ident ) => ({
+            $str.push_str(&$item_type.$field.to_string());
+            $str.push_str(" ");
+        })
+    }
+
+    #[macro_export]
+    macro_rules! serializer_append_field_last {
+        ( $item_type: expr, $str: expr, $field: ident ) => ({
+            $str.push_str(&$item_type.$field.to_string());
+        })
+    }
+
+    #[macro_export]
+    macro_rules! serializer_append_field_last_as_bool {
+        ( $item_type: expr, $str: expr, $field: ident ) => ({
+            $str.push_str(if $item_type.$field { "1" } else { "0" });
+        })
+    }
+
+
+    named!(pub parse_str_fragment_to_bool<&[u8], bool>, do_parse!(
+        val: parse_str_fragment_to_type!(u8)      >>
+        (val > 0)
+    ));
+
     named!(pub parse_str_fragment_to_u8<&[u8], u8>, parse_str_fragment_to_type!(u8));
     named!(pub parse_str_fragment_to_u16<&[u8], u16>, parse_str_fragment_to_type!(u16));
     named!(pub parse_str_fragment_to_u32<&[u8], u32>, parse_str_fragment_to_type!(u32));
+    named!(pub parse_str_fragment_to_u64<&[u8], u64>, parse_str_fragment_to_type!(u64));
     named!(pub parse_str_fragment_to_i32<&[u8], i32>, parse_str_fragment_to_type!(i32));
 
     named!(pub parse_str_fragment_crlfeof_to_u8<&[u8], u8>, parse_str_fragment_to_type_crlfeof!(u8));
     named!(pub parse_str_fragment_crlfeof_to_u32<&[u8], u32>, parse_str_fragment_to_type_crlfeof!(u32));
+    named!(pub parse_str_fragment_crlfeof_to_bool<&[u8], bool>, do_parse!(
+        val: parse_str_fragment_to_type_crlfeof!(u8)      >>
+
+        (val == 1)
+    ));
 
     pub fn remove_tildes_from(input: String) -> String {
         let result = str::replace(&input, "~", " ");
@@ -99,5 +137,39 @@ pub mod parser {
         let result = str::replace(&input, " ", "~");
 
         result
+    }
+
+    pub trait ParserSerializable {
+        fn serialize_to_string(&self) -> String;
+    }
+
+    pub fn split_bytes_by_lines(bytes: Vec<u8>) -> Vec<Vec<u8>> {
+        let mut bytes_split: Vec<Vec<u8>> = Vec::new();
+        let mut current_split: Vec<u8> = Vec::new();
+        let mut crlf_progress = 0;
+
+        for b in bytes {
+            if crlf_progress == 0 && b == 0x0D {
+                crlf_progress += 1;
+            }
+
+            else if crlf_progress == 1 && b == 0x0A {
+                bytes_split.push(current_split);
+                current_split = Vec::new();
+                crlf_progress = 0;
+            }
+
+            else if crlf_progress == 1 && b != 0x0A {
+                current_split.push(0x0D);
+                current_split.push(0x0A);
+                crlf_progress = 0;
+            }
+
+            else {
+                current_split.push(b);
+            }
+        }
+
+        bytes_split
     }
 }

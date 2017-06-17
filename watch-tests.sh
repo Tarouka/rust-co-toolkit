@@ -1,0 +1,1 @@
+RUSTFLAGS=-Awarnings watch -n 1 "cargo test $@"

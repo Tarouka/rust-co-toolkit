@@ -111,27 +111,11 @@ pub struct ItemTypeEntry {
 
 pub mod parser {
 	use super::{ItemTypeEntry, ItemTypeHeader, ItemType};
+
 	use datfiles::parser::*;
 
 	use nom::IResult;
 	use nom::IResult::Done;
-
-    pub trait ParserSerializable {
-    	fn serialize_to_string(&self) -> String;
-    }
-
-    macro_rules! serializer_append_field {
-    	( $item_type: expr, $str: expr, $field: ident ) => ({
-    		$str.push_str(&$item_type.$field.to_string());
-			$str.push_str(" ");
-    	})
-    }
-
-    macro_rules! serializer_append_field_last {
-    	( $item_type: expr, $str: expr, $field: ident ) => ({
-    		$str.push_str(&$item_type.$field.to_string());
-    	})
-    }
 
     impl ParserSerializable for ItemTypeEntry {
     	fn serialize_to_string(&self) -> String {
@@ -375,39 +359,10 @@ pub mod parser {
 		Some(ItemType { header: header, entries: entries })
 	}
 
-	pub fn split_bytes_by_lines(bytes: Vec<u8>) -> Vec<Vec<u8>> {
-		let mut bytes_split: Vec<Vec<u8>> = Vec::new();
-	    let mut current_split: Vec<u8> = Vec::new();
-	    let mut crlf_progress = 0;
-
-		for b in bytes {
-	        if crlf_progress == 0 && b == 0x0D {
-	            crlf_progress += 1;
-	        }
-
-	        else if crlf_progress == 1 && b == 0x0A {
-	            bytes_split.push(current_split);
-	            current_split = Vec::new();
-	            crlf_progress = 0;
-	        }
-
-	        else if crlf_progress == 1 && b != 0x0A {
-	            current_split.push(0x0D);
-	            current_split.push(0x0A);
-	            crlf_progress = 0;
-	        }
-
-	        else {
-	            current_split.push(b);
-	        }
-	    }
-
-	    bytes_split
-	}
-
 	#[cfg(test)]
 	mod tests {
-		use super::{item_type_header, item_type_entry, ParserSerializable};
+		use super::{item_type_header, item_type_entry};
+		use datfiles::parser::ParserSerializable;
 
 		macro_rules! assert_header_amount_eq {
 			( $str_to_parse:expr, $expected:expr ) => ({
@@ -786,7 +741,6 @@ pub mod parser {
 
 		#[test]
 		fn parse_item_entry_serialize_will_return_initial_line_1() {
-
 			let item_type_bytes = String::from(SAMPLE_ITEM_ENTRY_1).into_bytes();
 			let (_, parsed_item_entry) = item_type_entry(&item_type_bytes).unwrap();
 			let reserialized_line = parsed_item_entry.serialize_to_string();
@@ -796,7 +750,6 @@ pub mod parser {
 
 		#[test]
 		fn parse_item_entry_serialize_will_return_initial_line_2() {
-
 			let item_type_bytes = String::from(SAMPLE_ITEM_ENTRY_2).into_bytes();
 			let (_, parsed_item_entry) = item_type_entry(&item_type_bytes).unwrap();
 			let reserialized_line = parsed_item_entry.serialize_to_string();
@@ -806,7 +759,6 @@ pub mod parser {
 
 		#[test]
 		fn parse_item_entry_serialize_will_return_initial_line_3() {
-
 			let item_type_bytes = String::from(SAMPLE_ITEM_ENTRY_3).into_bytes();
 			let (_, parsed_item_entry) = item_type_entry(&item_type_bytes).unwrap();
 			let reserialized_line = parsed_item_entry.serialize_to_string();

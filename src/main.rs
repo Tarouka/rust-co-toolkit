@@ -25,8 +25,9 @@ use clap::{Arg, App, SubCommand, ArgMatches};
 
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 use nom::*;
-use itemtype::parser::ParserSerializable;
+use datfiles::parser::ParserSerializable;
 
+#[macro_use]
 mod datfiles;
 mod levelexp;
 mod itemtype;
@@ -35,7 +36,7 @@ mod magictype;
 
 fn get_app_usage<'a>() -> ArgMatches<'a> {
     App::new("CO V5165 Toolkit")
-        .version("0.2.0")
+        .version("0.3.0")
         .author("Tarouka <tarouka@openmailbox.org>")
 
         .subcommand(SubCommand::with_name("decrypt_dat")
@@ -70,8 +71,30 @@ fn get_app_usage<'a>() -> ArgMatches<'a> {
                 .arg(Arg::with_name("output-format").long("output-format").short("o").takes_value(true).possible_values(&["json"]).help("Assumes the format from the extension by default"))
                 .arg(Arg::with_name("encrypt").long("encrypt").short("e").help("The file will be encrypted"))
             )
-
         )
+
+        .subcommand(SubCommand::with_name("magictype")
+            .about("Encodes or decodes an magictype file to a parseable format.")
+            
+            .subcommand(SubCommand::with_name("decode")
+                .about("Decodes an magictype.dat file to a more workable format.")
+
+                .arg(Arg::with_name("output-format").long("output-format").short("o").takes_value(true).possible_values(&["json"]).help("Assumes JSON by default"))
+                .arg(Arg::with_name("decrypt").long("decrypt").short("d").help("The file will be decrypted before processing"))
+                .arg(Arg::with_name("FROM_FILE").help("Source filename").required(true))
+                .arg(Arg::with_name("TO_FILE").help("Destination filename").required(true))
+            )
+
+            .subcommand(SubCommand::with_name("encode")
+                .about("Encodes back an magictype.dat decoded format.")
+
+                .arg(Arg::with_name("FROM_FILE").help("Source filename").required(true))
+                .arg(Arg::with_name("TO_FILE").help("Destination filename").required(true))
+                .arg(Arg::with_name("output-format").long("output-format").short("o").takes_value(true).possible_values(&["json"]).help("Assumes the format from the extension by default"))
+                .arg(Arg::with_name("encrypt").long("encrypt").short("e").help("The file will be encrypted"))
+            )
+        )
+
         .get_matches()
 
 }
@@ -95,6 +118,16 @@ fn main() {
 
         if let Some(matches) = matches.subcommand_matches("encode") {
             prepare_itemtype_encode(&matches);
+        }
+    }
+
+    else if let Some(matches) = matches.subcommand_matches("magictype") {
+        if let Some(matches) = matches.subcommand_matches("decode") {
+            prepare_magictype_decode(&matches);
+        }
+
+        if let Some(matches) = matches.subcommand_matches("encode") {
+            prepare_magictype_encode(&matches);
         }
     }
 
@@ -152,7 +185,15 @@ fn prepare_itemtype_decode<'a>(matches: &'a ArgMatches) {
     let decrypt = matches.is_present("decrypt");
 
     let src_bytes = read_all_bytes(&src_filename);
-    let parsed_file = itemtype::parser::parse_item_type(&src_bytes);
+
+    let mut decrypted_bytes = read_all_bytes(&src_filename);
+
+    if decrypt {
+        let cofac_key = datfiles::generate_cofac_key();
+        decrypted_bytes = datfiles::decrypt_bytes(&decrypted_bytes, &cofac_key);
+    }
+
+    let parsed_file = itemtype::parser::parse_item_type(&decrypted_bytes);
 
     let mut decoded_bytes: Vec<u8> = Vec::new();
 
@@ -169,11 +210,7 @@ fn prepare_itemtype_decode<'a>(matches: &'a ArgMatches) {
     }
 
     let mut bytes_to_write = decoded_bytes;
-
-    if decrypt {
-        let cofac_key = datfiles::generate_cofac_key();
-        bytes_to_write = datfiles::decrypt_bytes(&bytes_to_write, &cofac_key);
-    }
+    
 
     write_all_bytes(&dst_filename, bytes_to_write);
 }
@@ -186,6 +223,63 @@ fn prepare_itemtype_encode<'a>(matches: &'a ArgMatches) {
 
     let src_bytes = read_all_bytes(&src_filename);
     let decoded_file = itemtype::encoder::encode_item_type_from_json(src_bytes);
+
+    let mut encoded_bytes: Vec<u8> = Vec::new();
+
+    if format == "json" {
+        encoded_bytes = decoded_file.serialize_to_string().into_bytes();
+    }
+
+    let mut bytes_to_write = encoded_bytes;
+
+    if encrypt {
+        let cofac_key = datfiles::generate_cofac_key();
+        bytes_to_write = datfiles::encrypt_bytes(&bytes_to_write, &cofac_key);
+    }
+
+    write_all_bytes(&dst_filename, bytes_to_write);
+}
+
+fn prepare_magictype_decode<'a>(matches: &'a ArgMatches) {
+    let src_filename = matches.value_of("FROM_FILE").unwrap();
+    let dst_filename = matches.value_of("TO_FILE").unwrap();
+    let format = matches.value_of("format").unwrap_or("json");
+    let decrypt = matches.is_present("decrypt");
+
+    let mut decrypted_bytes = read_all_bytes(&src_filename);
+
+    if decrypt {
+        let cofac_key = datfiles::generate_cofac_key();
+        decrypted_bytes = datfiles::decrypt_bytes(&decrypted_bytes, &cofac_key);
+    }
+
+    let parsed_file = magictype::parser::parse_magic_type(&decrypted_bytes);
+
+    let mut decoded_bytes: Vec<u8> = Vec::new();
+
+    match parsed_file {
+        Some(magic_type) => {
+            if format == "json" {
+                decoded_bytes = magictype::encoder::decode_magic_type_to_json(&magic_type);
+            }
+        },
+
+        None => {
+            println!("error parsing file");
+        }
+    }
+
+    write_all_bytes(&dst_filename, decoded_bytes);
+}
+
+fn prepare_magictype_encode<'a>(matches: &'a ArgMatches) {
+    let src_filename = matches.value_of("FROM_FILE").unwrap();
+    let dst_filename = matches.value_of("TO_FILE").unwrap();
+    let format = matches.value_of("format").unwrap_or("json");
+    let encrypt = matches.is_present("encrypt");
+
+    let src_bytes = read_all_bytes(&src_filename);
+    let decoded_file = magictype::encoder::encode_magic_type_from_json(src_bytes);
 
     let mut encoded_bytes: Vec<u8> = Vec::new();
 
