@@ -14,18 +14,14 @@ use std::env;
 
 #[macro_use]
 extern crate nom;
-extern crate byteorder;
 extern crate clap;
 extern crate serde_json;
+extern crate byteorder;
 
 #[macro_use]
 extern crate serde_derive;
 
 use clap::{Arg, App, SubCommand, ArgMatches};
-
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
-use nom::*;
-use datfiles::parser::ParserSerializable;
 
 #[macro_use]
 mod datfiles;
@@ -104,30 +100,30 @@ fn main() {
     let matches = get_app_usage();
 
     if let Some(matches) = matches.subcommand_matches("decrypt_dat") {
-        prepare_decrypt_dat(&matches);
+        commands::exec_decrypt_dat(&matches);
     }
 
     else if let Some(matches) = matches.subcommand_matches("encrypt_dat") {
-        prepare_encrypt_dat(&matches);
+        commands::exec_encrypt_dat(&matches);
     }
 
     else if let Some(matches) = matches.subcommand_matches("itemtype") {
         if let Some(matches) = matches.subcommand_matches("decode") {
-            prepare_itemtype_decode(&matches);
+            commands::exec_itemtype_decode(&matches);
         }
 
         if let Some(matches) = matches.subcommand_matches("encode") {
-            prepare_itemtype_encode(&matches);
+            commands::exec_itemtype_encode(&matches);
         }
     }
 
     else if let Some(matches) = matches.subcommand_matches("magictype") {
         if let Some(matches) = matches.subcommand_matches("decode") {
-            prepare_magictype_decode(&matches);
+            commands::exec_magictype_decode(&matches);
         }
 
         if let Some(matches) = matches.subcommand_matches("encode") {
-            prepare_magictype_encode(&matches);
+            commands::exec_magictype_encode(&matches);
         }
     }
 
@@ -136,14 +132,7 @@ fn main() {
     }
 }
 
-fn prepare_decrypt_dat<'a>(matches: &'a ArgMatches) {
-    let src_filename = matches.value_of("SRC_FILENAME").unwrap();
-    let dst_filename = matches.value_of("DST_FILENAME").unwrap();
-
-    exec_decrypt_dat(&src_filename, &dst_filename);
-}
-
-fn exec_decrypt_dat(source: &str, dest: &str) {
+pub fn decrypt_cofac_dat(source: &str) -> Vec<u8> {
     let cofac_key = datfiles::generate_cofac_key();
     println!("Generated COFAC key successfully!");
 
@@ -153,151 +142,33 @@ fn exec_decrypt_dat(source: &str, dest: &str) {
     let bytes_dec = datfiles::decrypt_bytes(&bytes_read, &cofac_key);
     println!("Decryption complete.");
 
-    write_all_bytes(dest, bytes_dec);
-    println!("Wrote decrypted file to {} successfully.", dest);
+    bytes_dec
 }
 
-fn prepare_encrypt_dat<'a>(matches: &'a ArgMatches) {
-    let src_filename = matches.value_of("SRC_FILENAME").unwrap();
-    let dst_filename = matches.value_of("DST_FILENAME").unwrap();
+pub fn encrypt_cofac_bytes(source_bytes: Vec<u8>) -> Vec<u8> {
+    let cofac_key = datfiles::generate_cofac_key();
+    println!("Generated COFAC key successfully!");
 
-    exec_encrypt_dat(&src_filename, &dst_filename);
+    let bytes_enc = datfiles::encrypt_bytes(&source_bytes, &cofac_key);
+    println!("Encryption complete.");
+
+    bytes_enc
 }
 
-fn exec_encrypt_dat(source: &str, dest: &str) {
+pub fn encrypt_cofac_dat(source: &str) -> Vec<u8> {
     let cofac_key = datfiles::generate_cofac_key();
     println!("Generated COFAC key successfully!");
 
     let bytes_read = read_all_bytes(source);
     println!("File successfully read.");
 
-    let bytes_dec = datfiles::encrypt_bytes(&bytes_read, &cofac_key);
+    let bytes_enc = datfiles::encrypt_bytes(&bytes_read, &cofac_key);
     println!("Encryption complete.");
 
-    write_all_bytes(dest, bytes_dec);
-    println!("Wrote encrypted file to {} successfully.", dest);
+    bytes_enc
 }
 
-fn prepare_itemtype_decode<'a>(matches: &'a ArgMatches) {
-    let src_filename = matches.value_of("FROM_FILE").unwrap();
-    let dst_filename = matches.value_of("TO_FILE").unwrap();
-    let format = matches.value_of("format").unwrap_or("json");
-    let decrypt = matches.is_present("decrypt");
-
-    let src_bytes = read_all_bytes(&src_filename);
-
-    let mut decrypted_bytes = read_all_bytes(&src_filename);
-
-    if decrypt {
-        let cofac_key = datfiles::generate_cofac_key();
-        decrypted_bytes = datfiles::decrypt_bytes(&decrypted_bytes, &cofac_key);
-    }
-
-    let parsed_file = itemtype::parser::parse_item_type(&decrypted_bytes);
-
-    let mut decoded_bytes: Vec<u8> = Vec::new();
-
-    match parsed_file {
-        Some(item_type) => {
-            if format == "json" {
-                decoded_bytes = itemtype::encoder::decode_item_type_to_json(&item_type);
-            }
-        },
-
-        None => {
-            println!("error parsing file");
-        }
-    }
-
-    let mut bytes_to_write = decoded_bytes;
-    
-
-    write_all_bytes(&dst_filename, bytes_to_write);
-}
-
-fn prepare_itemtype_encode<'a>(matches: &'a ArgMatches) {
-    let src_filename = matches.value_of("FROM_FILE").unwrap();
-    let dst_filename = matches.value_of("TO_FILE").unwrap();
-    let format = matches.value_of("format").unwrap_or("json");
-    let encrypt = matches.is_present("encrypt");
-
-    let src_bytes = read_all_bytes(&src_filename);
-    let decoded_file = itemtype::encoder::encode_item_type_from_json(src_bytes);
-
-    let mut encoded_bytes: Vec<u8> = Vec::new();
-
-    if format == "json" {
-        encoded_bytes = decoded_file.serialize_to_string().into_bytes();
-    }
-
-    let mut bytes_to_write = encoded_bytes;
-
-    if encrypt {
-        let cofac_key = datfiles::generate_cofac_key();
-        bytes_to_write = datfiles::encrypt_bytes(&bytes_to_write, &cofac_key);
-    }
-
-    write_all_bytes(&dst_filename, bytes_to_write);
-}
-
-fn prepare_magictype_decode<'a>(matches: &'a ArgMatches) {
-    let src_filename = matches.value_of("FROM_FILE").unwrap();
-    let dst_filename = matches.value_of("TO_FILE").unwrap();
-    let format = matches.value_of("format").unwrap_or("json");
-    let decrypt = matches.is_present("decrypt");
-
-    let mut decrypted_bytes = read_all_bytes(&src_filename);
-
-    if decrypt {
-        let cofac_key = datfiles::generate_cofac_key();
-        decrypted_bytes = datfiles::decrypt_bytes(&decrypted_bytes, &cofac_key);
-    }
-
-    let parsed_file = magictype::parser::parse_magic_type(&decrypted_bytes);
-
-    let mut decoded_bytes: Vec<u8> = Vec::new();
-
-    match parsed_file {
-        Some(magic_type) => {
-            if format == "json" {
-                decoded_bytes = magictype::encoder::decode_magic_type_to_json(&magic_type);
-            }
-        },
-
-        None => {
-            println!("error parsing file");
-        }
-    }
-
-    write_all_bytes(&dst_filename, decoded_bytes);
-}
-
-fn prepare_magictype_encode<'a>(matches: &'a ArgMatches) {
-    let src_filename = matches.value_of("FROM_FILE").unwrap();
-    let dst_filename = matches.value_of("TO_FILE").unwrap();
-    let format = matches.value_of("format").unwrap_or("json");
-    let encrypt = matches.is_present("encrypt");
-
-    let src_bytes = read_all_bytes(&src_filename);
-    let decoded_file = magictype::encoder::encode_magic_type_from_json(src_bytes);
-
-    let mut encoded_bytes: Vec<u8> = Vec::new();
-
-    if format == "json" {
-        encoded_bytes = decoded_file.serialize_to_string().into_bytes();
-    }
-
-    let mut bytes_to_write = encoded_bytes;
-
-    if encrypt {
-        let cofac_key = datfiles::generate_cofac_key();
-        bytes_to_write = datfiles::encrypt_bytes(&bytes_to_write, &cofac_key);
-    }
-
-    write_all_bytes(&dst_filename, bytes_to_write);
-}
-
-fn read_all_bytes(filename: &str) -> Vec<u8> {
+pub fn read_all_bytes(filename: &str) -> Vec<u8> {
     let mut f = File::open(filename).unwrap();
     let mut buffer = Vec::new();
 
@@ -306,14 +177,153 @@ fn read_all_bytes(filename: &str) -> Vec<u8> {
     buffer
 }
 
-fn write_all_bytes(filename: &str, bytes: Vec<u8>) {
+pub fn write_all_bytes(filename: &str, bytes: Vec<u8>) {
     let mut f = File::create(filename).unwrap();
 
     f.write_all(&bytes);
 }
 
+mod commands {
+    use super::*;
+    use datfiles::parser::ParserSerializable;
 
 
+    struct DecoderArgs<'a> {
+        src_filename: &'a str,
+        dst_filename: &'a str,
+        format: &'a str,
+        decrypt: bool
+    }
+
+    struct EncoderArgs<'a> {
+        src_filename: &'a str,
+        dst_filename: &'a str,
+        format: &'a str,
+        encrypt: bool
+    }
+
+    fn get_decoder_args<'a>(matches: &'a ArgMatches) -> DecoderArgs<'a> {
+        DecoderArgs {
+            src_filename: matches.value_of("FROM_FILE").unwrap(),
+            dst_filename: matches.value_of("TO_FILE").unwrap(),
+            format: matches.value_of("format").unwrap_or("json"),
+            decrypt: matches.is_present("decrypt")
+        }
+    }
+
+    fn get_encoder_args<'a>(matches: &'a ArgMatches) -> EncoderArgs<'a> {
+        EncoderArgs {
+            src_filename: matches.value_of("FROM_FILE").unwrap(),
+            dst_filename: matches.value_of("TO_FILE").unwrap(),
+            format: matches.value_of("format").unwrap_or("json"),
+            encrypt: matches.is_present("encrypt")
+        }
+    }
+
+    pub fn exec_decrypt_dat<'a>(matches: &'a ArgMatches) {
+        let src_filename = matches.value_of("SRC_FILENAME").unwrap();
+        let dst_filename = matches.value_of("DST_FILENAME").unwrap();
+
+        let bytes_dec = decrypt_cofac_dat(src_filename);
+
+        write_all_bytes(dst_filename, bytes_dec);
+        println!("Wrote decrypted file to {} successfully.", dst_filename);
+    }
+
+    pub fn exec_encrypt_dat<'a>(matches: &'a ArgMatches) {
+        let src_filename = matches.value_of("SRC_FILENAME").unwrap();
+        let dst_filename = matches.value_of("DST_FILENAME").unwrap();
+
+        let bytes_enc = encrypt_cofac_dat(src_filename);
+
+        write_all_bytes(dst_filename, bytes_enc);
+        println!("Wrote encrypted file to {} successfully.", dst_filename);
+    }
+
+    pub fn exec_itemtype_decode<'a>(matches: &'a ArgMatches) {
+        let args = get_decoder_args(matches);
+
+        let src_bytes = if args.decrypt { decrypt_cofac_dat(args.src_filename) } else { read_all_bytes(&args.src_filename) };
+        let parsed_file = itemtype::parser::parse_item_type(&src_bytes);
+
+        let mut bytes_to_write: Vec<u8> = Vec::new();
+
+        match parsed_file {
+            Some(item_type) => {
+                if args.format == "json" {
+                    bytes_to_write = itemtype::encoder::decode_item_type_to_json(&item_type);
+                }
+            },
+
+            None => {
+                panic!("An error occured while parsing the file.");
+            }
+        }
+
+        write_all_bytes(&args.dst_filename, bytes_to_write);
+    }
+
+    pub fn exec_itemtype_encode<'a>(matches: &'a ArgMatches) {
+        let args = get_encoder_args(matches);
+
+        let src_bytes = read_all_bytes(&args.src_filename);
+        let decoded_file = itemtype::encoder::encode_item_type_from_json(src_bytes);
+
+        let mut encoded_bytes: Vec<u8> = Vec::new();
+
+        if args.format == "json" {
+            encoded_bytes = decoded_file.serialize_to_string().into_bytes();
+        } else {
+            panic!("Unsupported format");
+        }
+
+        let mut bytes_to_write = if args.encrypt { encrypt_cofac_bytes(encoded_bytes) } else { encoded_bytes };
+
+        write_all_bytes(&args.dst_filename, bytes_to_write);
+    }
+
+    pub fn exec_magictype_decode<'a>(matches: &'a ArgMatches) {
+        let args = get_decoder_args(matches);
+
+        let src_bytes = if args.decrypt { decrypt_cofac_dat(args.src_filename) } else { read_all_bytes(&args.src_filename) };
+        let parsed_file = magictype::parser::parse_magic_type(&src_bytes);
+
+        let mut bytes_to_write: Vec<u8> = Vec::new();
+
+        match parsed_file {
+            Some(magic_type) => {
+                if args.format == "json" {
+                    bytes_to_write = magictype::encoder::decode_magic_type_to_json(&magic_type);
+                }
+            },
+
+            None => {
+                panic!("An error occured while parsing the file.");
+            }
+        }
+
+        write_all_bytes(&args.dst_filename, bytes_to_write);
+    }
+
+    pub fn exec_magictype_encode<'a>(matches: &'a ArgMatches) {
+        let args = get_encoder_args(matches);
+
+        let src_bytes = read_all_bytes(&args.src_filename);
+        let decoded_file = magictype::encoder::encode_magic_type_from_json(src_bytes);
+
+        let mut encoded_bytes: Vec<u8> = Vec::new();
+
+        if args.format == "json" {
+            encoded_bytes = decoded_file.serialize_to_string().into_bytes();
+        } else {
+            panic!("Unsupported format");
+        }
+
+        let mut bytes_to_write = if args.encrypt { encrypt_cofac_bytes(encoded_bytes) } else { encoded_bytes };
+
+        write_all_bytes(&args.dst_filename, bytes_to_write);
+    }
+}
 
 /*fn read_all_maps() {
     let maps_folder = "";
