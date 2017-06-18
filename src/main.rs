@@ -33,7 +33,7 @@ mod magictype;
 
 fn get_app_usage<'a>() -> ArgMatches<'a> {
     App::new("CO V5165 Toolkit")
-        .version("0.3.0")
+        .version("0.3.1")
         .author("Tarouka <tarouka@openmailbox.org>")
 
         .subcommand(SubCommand::with_name("decrypt_dat")

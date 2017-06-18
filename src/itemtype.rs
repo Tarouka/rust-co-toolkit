@@ -118,7 +118,6 @@ pub mod parser {
 	use nom::IResult::Done;
 
 	use regex::*;
-	use str::from_utf8;
 
     impl ParserSerializable for ItemTypeEntry {
     	fn serialize_to_string(&self) -> String {
@@ -223,11 +222,11 @@ pub mod parser {
 	}
 
 	pub fn item_type_entry<'a>(val: &'a [u8]) -> Result<ItemTypeEntry, usize> {
-		let val_as_str = from_utf8(val).unwrap();
+		let val_as_str = String::from_utf8_lossy(val).into_owned();
 		let reg_parser_items = Regex::new(r"(\S+)\s*").unwrap();
 		let mut packed_strs: Vec<String> = Vec::new();
 
-		for cap in reg_parser_items.captures_iter(val_as_str) {
+		for cap in reg_parser_items.captures_iter(&val_as_str) {
 			packed_strs.push(String::from(&cap[1]));
 		}
 
