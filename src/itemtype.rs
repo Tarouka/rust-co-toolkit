@@ -117,6 +117,9 @@ pub mod parser {
 	use nom::IResult;
 	use nom::IResult::Done;
 
+	use regex::*;
+	use str::from_utf8;
+
     impl ParserSerializable for ItemTypeEntry {
     	fn serialize_to_string(&self) -> String {
     		let mut ret_string: String = String::new();
@@ -219,103 +222,101 @@ pub mod parser {
 		)
 	}
 
-	pub fn item_type_entry(input: &[u8]) -> IResult<&[u8], ItemTypeEntry> {
-		do_parse!(input,
-			id: 				parse_str_fragment_to_u32			>>
-			name:				parse_str_fragment					>>
-			profession_req: 	parse_str_fragment_to_u8			>>
-			proficiency_req:	parse_str_fragment_to_u8			>>
-			lvl_req:			parse_str_fragment_to_u8			>>
-			sex_req:			parse_str_fragment_to_u8			>>
-			str_req:			parse_str_fragment_to_u16			>>
-			agi_req:			parse_str_fragment_to_u16			>>
-			vit_req:			parse_str_fragment_to_u16			>>
-			spi_req:			parse_str_fragment_to_u16			>>
-
-			action_mask:		parse_str_fragment_to_u8			>>
-
-			weight:				parse_str_fragment_to_u16			>>
-			buy_price:			parse_str_fragment_to_u32			>>
-			action_id:			parse_str_fragment_to_u32			>>
-			max_phys_atk:		parse_str_fragment_to_u16			>>
-			min_phys_atk:		parse_str_fragment_to_u16			>>
-			phys_def:			parse_str_fragment_to_u16			>>
-			accuracy:			parse_str_fragment_to_u8			>>
-			dodge:				parse_str_fragment_to_u8			>>
-			hp_restored:		parse_str_fragment_to_u16			>>
-			mp_restored:		parse_str_fragment_to_u16			>>
-			amount:				parse_str_fragment_to_u16			>>
-			amount_limit:		parse_str_fragment_to_u16			>>
-			status:				parse_str_fragment_to_u16			>>
-			gem1:				parse_str_fragment_to_u8			>>
-			gem2:				parse_str_fragment_to_u8			>>
-			magic1:				parse_str_fragment_to_u8			>>
-			magic2:				parse_str_fragment_to_u8			>>
-			magic3:				parse_str_fragment_to_u8			>>
-			magic_atk:			parse_str_fragment_to_u16			>>
-			magic_def:			parse_str_fragment_to_u16			>>
-			atk_range:			parse_str_fragment_to_u8			>>
-			atk_speed:			parse_str_fragment_to_u16			>>
-			fray_mode:			parse_str_fragment_to_u32			>>
-			repair_mode:		parse_str_fragment_to_u32			>>
-			type_mask:			parse_str_fragment_to_u32			>>
-			buy_cps_price:		parse_str_fragment_to_u16			>>
-			type_name:			parse_str_fragment					>>
-			description:		parse_str_fragment					>>
-			unknown_1:			parse_str_fragment_crlfeof_to_u8	>>
-
-			(
-				ItemTypeEntry {
-					id: id,
-					name: name,
-					profession_req: profession_req,
-					proficiency_req: proficiency_req,
-					lvl_req: lvl_req,
-					sex_req: sex_req,
-					str_req: str_req,
-					agi_req: agi_req,
-					vit_req: vit_req,
-					spi_req: spi_req,
-
-					is_sell_disabled: (action_mask & 0x20) > 0,
-					does_item_never_drop_on_death: (action_mask & 0x10) > 0,
-					should_show_important_sell_hint: (action_mask & 0x08) > 0,
-					should_show_important_drop_hint: (action_mask & 0x04) > 0,
-					is_unstoreable: (action_mask & 0x02) > 0,
-					is_untradeable: (action_mask & 0x01) > 0,
-
-					weight: weight,
-					buy_price: buy_price,
-					action_id: action_id,
-					max_phys_atk: max_phys_atk,
-					min_phys_atk: min_phys_atk,
-					phys_def: phys_def,
-					accuracy: accuracy,
-					dodge: dodge,
-					hp_restored: hp_restored,
-					mp_restored: mp_restored,
-					amount: amount,
-					amount_limit: amount_limit,
-					status: status,
-					gem1: gem1,
-					gem2: gem2,
-					magic1: magic1,
-					magic2: magic2,
-					magic3: magic3,
-					magic_atk: magic_atk,
-					magic_def: magic_def,
-					atk_range: atk_range,
-					atk_speed: atk_speed,
-					fray_mode: fray_mode,
-					repair_mode: repair_mode,
-					type_mask: type_mask,
-					buy_cps_price: buy_cps_price,
-					type_name: type_name,
-					description: remove_tildes_from(description),
-					unknown_1: unknown_1
+	macro_rules! parse_match_to_type(
+		( $value:expr, $type:ty, $idx:expr ) => {
+			match $value.parse::<$type>() {
+				Ok(s) => {
+					return Result::Ok(s);
 				}
-			)
-		)
+
+				_ => {
+					return Result::Err($idx);
+				}
+			}
+		}
+	);
+
+	fn parse_match_to_u8(matches: &Vec<String>, idx: usize) -> Result<u8, usize> {
+		parse_match_to_type!(matches[idx], u8, idx)
+	}
+
+	fn parse_match_to_u16(matches: &Vec<String>, idx: usize) -> Result<u16, usize> {
+		parse_match_to_type!(matches[idx], u16, idx)
+	}
+
+	fn parse_match_to_u32(matches: &Vec<String>, idx: usize) -> Result<u32, usize> {
+		parse_match_to_type!(matches[idx], u32, idx)
+	}
+
+	fn parse_match_to_i32(matches: &Vec<String>, idx: usize) -> Result<i32, usize> {
+		parse_match_to_type!(matches[idx], i32, idx)
+	}
+
+	fn parse_match_to_u64(matches: &Vec<String>, idx: usize) -> Result<u64, usize> {
+		parse_match_to_type!(matches[idx], u64, idx)
+	}
+
+	pub fn item_type_entry<'a>(val: &'a [u8]) -> Result<ItemTypeEntry, usize> {
+		let val_as_str = from_utf8(val).unwrap();
+		let reg_parser_items = Regex::new(r"(\S+)\s*").unwrap();
+		let mut packed_strs: Vec<String> = Vec::new();
+
+		for cap in reg_parser_items.captures_iter(val_as_str) {
+			packed_strs.push(String::from(&cap[1]));
+		}
+
+		let action_mask = parse_match_to_u8(&packed_strs, 10)?;
+		let entry = ItemTypeEntry {
+			id:										parse_match_to_u32(&packed_strs, 0)?,
+			name:									packed_strs[1].clone(),
+			profession_req:							parse_match_to_u8(&packed_strs, 2)?,
+			proficiency_req:						parse_match_to_u8(&packed_strs, 3)?,
+			lvl_req:								parse_match_to_u8(&packed_strs, 4)?,
+			sex_req:								parse_match_to_u8(&packed_strs, 5)?,
+			str_req:								parse_match_to_u16(&packed_strs, 6)?,
+			agi_req:								parse_match_to_u16(&packed_strs, 7)?,
+			vit_req:								parse_match_to_u16(&packed_strs, 8)?,
+			spi_req:								parse_match_to_u16(&packed_strs, 9)?,
+
+			is_sell_disabled:						(action_mask & 0x20) > 0,
+			does_item_never_drop_on_death:			(action_mask & 0x10) > 0,
+			should_show_important_sell_hint:		(action_mask & 0x08) > 0,
+			should_show_important_drop_hint:		(action_mask & 0x04) > 0,
+			is_unstoreable:							(action_mask & 0x02) > 0,
+			is_untradeable:							(action_mask & 0x01) > 0,
+
+			weight:									parse_match_to_u16(&packed_strs, 11)?,
+			buy_price:								parse_match_to_u32(&packed_strs, 12)?,
+			action_id:								parse_match_to_u32(&packed_strs, 13)?,
+			max_phys_atk:							parse_match_to_u16(&packed_strs, 14)?,
+			min_phys_atk:							parse_match_to_u16(&packed_strs, 15)?,
+			phys_def:								parse_match_to_u16(&packed_strs, 16)?,
+			accuracy:								parse_match_to_u8(&packed_strs, 17)?,
+			dodge:									parse_match_to_u8(&packed_strs, 18)?,
+			hp_restored:							parse_match_to_u16(&packed_strs, 19)?,
+			mp_restored:							parse_match_to_u16(&packed_strs, 20)?,
+			amount:									parse_match_to_u16(&packed_strs, 21)?,
+			amount_limit:							parse_match_to_u16(&packed_strs, 22)?,
+			status:									parse_match_to_u16(&packed_strs, 23)?,
+			gem1:									parse_match_to_u8(&packed_strs, 24)?,
+			gem2:									parse_match_to_u8(&packed_strs, 25)?,
+			magic1:									parse_match_to_u8(&packed_strs, 26)?,
+			magic2:									parse_match_to_u8(&packed_strs, 27)?,
+			magic3:									parse_match_to_u8(&packed_strs, 28)?,
+			magic_atk:								parse_match_to_u16(&packed_strs, 29)?,
+			magic_def:								parse_match_to_u16(&packed_strs, 30)?,
+			atk_range:								parse_match_to_u8(&packed_strs, 31)?,
+			atk_speed:								parse_match_to_u16(&packed_strs, 32)?,
+			fray_mode:								parse_match_to_u32(&packed_strs, 33)?,
+			repair_mode:							parse_match_to_u32(&packed_strs, 34)?,
+			type_mask:								parse_match_to_u32(&packed_strs, 35)?,
+			buy_cps_price:							parse_match_to_u16(&packed_strs, 36)?,
+			type_name:								packed_strs[37].clone(),
+			description:							remove_tildes_from(packed_strs[38].clone()),
+			unknown_1:								parse_match_to_u8(&packed_strs, 39)?
+		};
+
+		Result::Ok(entry)
 	}
 
 
@@ -346,12 +347,12 @@ pub mod parser {
 			let line = bytes_split.get(idx).unwrap();
 
 			match item_type_entry(&line) {
-				IResult::Done(_, item_type_entry_parsed) => {
+				Result::Ok(item_type_entry_parsed) => {
 					entries.push(item_type_entry_parsed);
 				},
 
-				e => {
-
+				Result::Err(idx) => {
+					println!("Error at field index {}", idx);
 				}
 			}
 		}
@@ -376,7 +377,7 @@ pub mod parser {
 		macro_rules! assert_item_type_field_eq {
 			( $str_to_parse:expr, $field:ident, $expected:expr ) => ({
 	    		let item_type_bytes = String::from($str_to_parse).into_bytes();
-				let (_, parsed_item_entry) = item_type_entry(&item_type_bytes).unwrap();
+				let parsed_item_entry = item_type_entry(&item_type_bytes).unwrap();
 
 				assert_eq!($expected, parsed_item_entry.$field);
 			})
@@ -742,7 +743,7 @@ pub mod parser {
 		#[test]
 		fn parse_item_entry_serialize_will_return_initial_line_1() {
 			let item_type_bytes = String::from(SAMPLE_ITEM_ENTRY_1).into_bytes();
-			let (_, parsed_item_entry) = item_type_entry(&item_type_bytes).unwrap();
+			let parsed_item_entry = item_type_entry(&item_type_bytes).unwrap();
 			let reserialized_line = parsed_item_entry.serialize_to_string();
 
 			assert_eq!(SAMPLE_ITEM_ENTRY_1, reserialized_line);
@@ -751,7 +752,7 @@ pub mod parser {
 		#[test]
 		fn parse_item_entry_serialize_will_return_initial_line_2() {
 			let item_type_bytes = String::from(SAMPLE_ITEM_ENTRY_2).into_bytes();
-			let (_, parsed_item_entry) = item_type_entry(&item_type_bytes).unwrap();
+			let parsed_item_entry = item_type_entry(&item_type_bytes).unwrap();
 			let reserialized_line = parsed_item_entry.serialize_to_string();
 
 			assert_eq!(SAMPLE_ITEM_ENTRY_2, reserialized_line);
@@ -760,7 +761,7 @@ pub mod parser {
 		#[test]
 		fn parse_item_entry_serialize_will_return_initial_line_3() {
 			let item_type_bytes = String::from(SAMPLE_ITEM_ENTRY_3).into_bytes();
-			let (_, parsed_item_entry) = item_type_entry(&item_type_bytes).unwrap();
+			let parsed_item_entry = item_type_entry(&item_type_bytes).unwrap();
 			let reserialized_line = parsed_item_entry.serialize_to_string();
 
 			assert_eq!(SAMPLE_ITEM_ENTRY_3, reserialized_line);

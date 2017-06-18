@@ -17,6 +17,7 @@ extern crate nom;
 extern crate clap;
 extern crate serde_json;
 extern crate byteorder;
+extern crate regex;
 
 #[macro_use]
 extern crate serde_derive;
