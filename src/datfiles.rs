@@ -172,4 +172,54 @@ pub mod parser {
 
         bytes_split
     }
+
+    macro_rules! parse_match_to_type(
+        ( $value:expr, $type:ty, $idx:expr ) => {
+            match $value.parse::<$type>() {
+                Ok(s) => {
+                    return Result::Ok(s);
+                }
+
+                _ => {
+                    return Result::Err($idx);
+                }
+            }
+        }
+    );
+
+    pub fn parse_match_to_u8(matches: &Vec<String>, idx: usize) -> Result<u8, usize> {
+        parse_match_to_type!(matches[idx], u8, idx)
+    }
+
+    pub fn parse_match_to_u16(matches: &Vec<String>, idx: usize) -> Result<u16, usize> {
+        parse_match_to_type!(matches[idx], u16, idx)
+    }
+
+    pub fn parse_match_to_u32(matches: &Vec<String>, idx: usize) -> Result<u32, usize> {
+        parse_match_to_type!(matches[idx], u32, idx)
+    }
+
+    pub fn parse_match_to_i32(matches: &Vec<String>, idx: usize) -> Result<i32, usize> {
+        parse_match_to_type!(matches[idx], i32, idx)
+    }
+
+    pub fn parse_match_to_u64(matches: &Vec<String>, idx: usize) -> Result<u64, usize> {
+        parse_match_to_type!(matches[idx], u64, idx)
+    }
+
+    pub fn parse_match_to_i64(matches: &Vec<String>, idx: usize) -> Result<i64, usize> {
+        parse_match_to_type!(matches[idx], i64, idx)
+    }
+
+    pub fn parse_match_to_bool(matches: &Vec<String>, idx: usize) -> Result<bool, usize> {
+        match parse_match_to_i64(matches, idx) {
+            Result::Ok(res) => {
+                return Result::Ok(res > 0);
+            }
+
+            _ => {
+                return Result::Err(idx);
+            }
+        }
+    }
 }

@@ -127,6 +127,8 @@ pub mod parser {
 	use super::{MagicTypeHeader, MagicTypeEntry, MagicType};
 	use datfiles::parser;
 	use datfiles::parser::*;
+	use regex::*;
+	use str::from_utf8;
 
 	use nom::*;
 
@@ -241,120 +243,74 @@ pub mod parser {
 		)
 	}
 
-	pub fn magic_type_entry(input: &[u8]) -> IResult<&[u8], MagicTypeEntry> {
-		do_parse!(input,
-			id: 						add_return_error!(ErrorKind::Custom(1), parse_str_fragment_to_u32)			>>
-			action_sort:				add_return_error!(ErrorKind::Custom(2), parse_str_fragment_to_u8)			>>
-			skill_name:					add_return_error!(ErrorKind::Custom(3), parse_str_fragment)					>>
-			is_offensive_on_use:		add_return_error!(ErrorKind::Custom(4), parse_str_fragment_to_bool)			>>
-			is_ground_targeted:			add_return_error!(ErrorKind::Custom(5), parse_str_fragment_to_bool)			>>
-			is_multi_target:			add_return_error!(ErrorKind::Custom(6), parse_str_fragment_to_bool)			>>
-			target_flag:				add_return_error!(ErrorKind::Custom(7), parse_str_fragment_to_u8)			>>
-			skill_lvl:					add_return_error!(ErrorKind::Custom(8), parse_str_fragment_to_u8)			>>
-			mp_cost:					add_return_error!(ErrorKind::Custom(9), parse_str_fragment_to_u16)			>>
-			power:						add_return_error!(ErrorKind::Custom(10), parse_str_fragment_to_i32)			>>
-			intone_effect_duration: 	add_return_error!(ErrorKind::Custom(11), parse_str_fragment_to_u32)			>>
-			accuracy:					add_return_error!(ErrorKind::Custom(12), parse_str_fragment_to_u8)			>>
-			time:						add_return_error!(ErrorKind::Custom(13), parse_str_fragment_to_u32)			>>
-			range:						add_return_error!(ErrorKind::Custom(14), parse_str_fragment_to_u32)			>>
-			max_distance:				add_return_error!(ErrorKind::Custom(15), parse_str_fragment_to_u8)			>>
-			status:						add_return_error!(ErrorKind::Custom(16), parse_str_fragment_to_u64)			>>
-			job_required:				add_return_error!(ErrorKind::Custom(17), parse_str_fragment_to_u32)			>>
-			xp_required:				add_return_error!(ErrorKind::Custom(18), parse_str_fragment_to_u64)			>>
-			lvl_required:				add_return_error!(ErrorKind::Custom(19), parse_str_fragment_to_u8)			>>
-			skill_type:					add_return_error!(ErrorKind::Custom(20), parse_str_fragment_to_u8)			>>
-			weapon_required:			add_return_error!(ErrorKind::Custom(21), parse_str_fragment_to_u16)			>>
-			active_time:				add_return_error!(ErrorKind::Custom(22), parse_str_fragment_to_u32)			>>
-			auto_active:				add_return_error!(ErrorKind::Custom(23), parse_str_fragment_to_u16)			>>
-			floor_attribute:			add_return_error!(ErrorKind::Custom(24), parse_str_fragment_to_u32)			>>
-			is_auto_learned:			add_return_error!(ErrorKind::Custom(25), parse_str_fragment_to_bool)			>>
-			auto_learn_lvl:				add_return_error!(ErrorKind::Custom(26), parse_str_fragment_to_u8)			>>
-			drop_weapon:				add_return_error!(ErrorKind::Custom(27), parse_str_fragment_to_u32)			>>
-			stamina_cost:				add_return_error!(ErrorKind::Custom(28), parse_str_fragment_to_u8)			>>
-			hits_with_weapon:			add_return_error!(ErrorKind::Custom(29), parse_str_fragment_to_u8)			>>
-			uses_item:					add_return_error!(ErrorKind::Custom(30), parse_str_fragment_to_u8)			>>
-			next_skill_id_auto_cast:	add_return_error!(ErrorKind::Custom(31), parse_str_fragment_to_u32)			>>
-			use_delay:					add_return_error!(ErrorKind::Custom(32), parse_str_fragment_to_u32)			>>
-			use_item_num:				add_return_error!(ErrorKind::Custom(33), parse_str_fragment_to_u8)			>>
-			sender_action:				add_return_error!(ErrorKind::Custom(34), parse_str_fragment_to_u32)			>>
-			short_desc:					add_return_error!(ErrorKind::Custom(35), parse_str_fragment)					>>
-			desc:						add_return_error!(ErrorKind::Custom(36), parse_str_fragment)					>>
-			intone_effect:				add_return_error!(ErrorKind::Custom(37), parse_str_fragment)					>>
-			intone_sfx:					add_return_error!(ErrorKind::Custom(38), parse_str_fragment)					>>
-			sender_effect:				add_return_error!(ErrorKind::Custom(39), parse_str_fragment)					>>
-			sender_sfx:					add_return_error!(ErrorKind::Custom(40), parse_str_fragment)					>>
-			target_delay:				add_return_error!(ErrorKind::Custom(41), parse_str_fragment_to_u32)			>>
-			target_effect:				add_return_error!(ErrorKind::Custom(42), parse_str_fragment)					>>
-			target_sfx:					add_return_error!(ErrorKind::Custom(43), parse_str_fragment)					>>
-			ground_effect:				add_return_error!(ErrorKind::Custom(44), parse_str_fragment)					>>
-			trace_effect:				add_return_error!(ErrorKind::Custom(45), parse_str_fragment)					>>
-			screen_represent:			add_return_error!(ErrorKind::Custom(46), parse_str_fragment_to_bool)			>>
-			is_usable_in_market:		add_return_error!(ErrorKind::Custom(47), parse_str_fragment_to_bool)			>>
-			is_staggering:				add_return_error!(ErrorKind::Custom(48), parse_str_fragment_crlfeof_to_bool)	>>
+	pub fn magic_type_entry<'a>(val: &'a [u8]) -> Result<MagicTypeEntry, usize> {
+		let val_as_str = from_utf8(val).unwrap();
+		let reg_parser_items = Regex::new(r"(\S+)\s*").unwrap();
+		let mut packed_strs: Vec<String> = Vec::new();
 
-			(
-				MagicTypeEntry {
-					id: id,
-					action_sort: action_sort,
-					skill_name: skill_name,
-					is_offensive_on_use: is_offensive_on_use,
-					is_ground_targeted: is_ground_targeted,
-					is_multi_target: is_multi_target,
+		for cap in reg_parser_items.captures_iter(val_as_str) {
+			packed_strs.push(String::from(&cap[1]));
+		}
 
-					is_body_target: (target_flag & 0x10) > 0,
-					is_passive_target: (target_flag & 0x08) > 0,
-					is_terrain_target: (target_flag & 0x04) > 0,
-					is_none_target: (target_flag & 0x02) > 0,
-					is_self_target: (target_flag & 0x01) > 0,
+		let target_flag = parse_match_to_u8(&packed_strs, 6)?;
+		let entry = MagicTypeEntry {
+			id:							parse_match_to_u32(&packed_strs, 0)?,
+			action_sort:				parse_match_to_u8(&packed_strs, 1)?,
+			skill_name:					packed_strs[2].clone(),
+			is_offensive_on_use:		parse_match_to_bool(&packed_strs, 3)?,
+			is_ground_targeted:			parse_match_to_bool(&packed_strs, 4)?,
+			is_multi_target:			parse_match_to_bool(&packed_strs, 5)?,
 
-					skill_lvl: skill_lvl,
-					mp_cost: mp_cost,
-					power: power,
-					intone_effect_duration: intone_effect_duration,
-					accuracy: accuracy,
-					time: time,
-					range: range,
-					max_distance: max_distance,
-					status: status,
-					job_required: job_required,
-					xp_required: xp_required,
-					lvl_required: lvl_required,
-					skill_type: skill_type,
-					weapon_required: weapon_required,
-					active_time: active_time,
-					auto_active: auto_active,
-					floor_attribute: floor_attribute,
-					is_auto_learned: is_auto_learned,
-					auto_learn_lvl: auto_learn_lvl,
-					drop_weapon: drop_weapon,
-					stamina_cost: stamina_cost,
-					hits_with_weapon: hits_with_weapon,
-					uses_item: uses_item,
-					next_skill_id_auto_cast: next_skill_id_auto_cast,
-					use_delay: use_delay,
-					use_item_num: use_item_num,
-					sender_action: sender_action,
+			is_body_target:				(target_flag & 0x10) > 0,
+			is_passive_target:			(target_flag & 0x08) > 0,
+			is_terrain_target:			(target_flag & 0x04) > 0,
+			is_none_target:				(target_flag & 0x02) > 0,
+			is_self_target:				(target_flag & 0x01) > 0,
 
-					short_desc: remove_tildes_from(short_desc),
-					desc: remove_tildes_from(desc),
-					intone_effect: intone_effect,
-					intone_sfx: intone_sfx,
-					sender_effect: sender_effect,
-					sender_sfx: sender_sfx,
+			skill_lvl:					parse_match_to_u8(&packed_strs, 7)?,
+			mp_cost:					parse_match_to_u16(&packed_strs, 8)?,
+			power:						parse_match_to_i32(&packed_strs, 9)?,
+			intone_effect_duration:		parse_match_to_u32(&packed_strs, 10)?,
+			accuracy:					parse_match_to_u8(&packed_strs, 11)?,
+			time:						parse_match_to_u32(&packed_strs, 12)?,
+			range:						parse_match_to_u32(&packed_strs, 13)?,
+			max_distance:				parse_match_to_u8(&packed_strs, 14)?,
+			status:						parse_match_to_u64(&packed_strs, 15)?,
+			job_required:				parse_match_to_u32(&packed_strs, 16)?,
+			xp_required:				parse_match_to_u64(&packed_strs, 17)?,
+			lvl_required:				parse_match_to_u8(&packed_strs, 18)?,
+			skill_type:					parse_match_to_u8(&packed_strs, 19)?,
+			weapon_required:			parse_match_to_u16(&packed_strs, 20)?,
+			active_time:				parse_match_to_u32(&packed_strs, 21)?,
+			auto_active:				parse_match_to_u16(&packed_strs, 22)?,
+			floor_attribute:			parse_match_to_u32(&packed_strs, 23)?,
+			is_auto_learned:			parse_match_to_bool(&packed_strs, 24)?,
+			auto_learn_lvl:				parse_match_to_u8(&packed_strs, 25)?,
+			drop_weapon:				parse_match_to_u32(&packed_strs, 26)?,
+			stamina_cost:				parse_match_to_u8(&packed_strs, 27)?,
+			hits_with_weapon:			parse_match_to_u8(&packed_strs, 28)?,
+			uses_item:					parse_match_to_u8(&packed_strs, 29)?,
+			next_skill_id_auto_cast:	parse_match_to_u32(&packed_strs, 30)?,
+			use_delay:					parse_match_to_u32(&packed_strs, 31)?,
+			use_item_num:				parse_match_to_u8(&packed_strs, 32)?,
+			sender_action:				parse_match_to_u32(&packed_strs, 33)?,
+			short_desc:					remove_tildes_from(packed_strs[34].clone()),
+			desc:						remove_tildes_from(packed_strs[35].clone()),
+			intone_effect:				packed_strs[36].clone(),
+			intone_sfx:					packed_strs[37].clone(),
+			sender_effect:				packed_strs[38].clone(),
+			sender_sfx:					packed_strs[39].clone(),
+			target_delay:				parse_match_to_u32(&packed_strs, 40)?,
+			target_effect:				packed_strs[41].clone(),
+			target_sfx:					packed_strs[42].clone(),
+			ground_effect:				packed_strs[43].clone(),
+			trace_effect:				packed_strs[44].clone(),
+			screen_represent:			parse_match_to_bool(&packed_strs, 45)?,
+			is_usable_in_market:		parse_match_to_bool(&packed_strs, 46)?,
+			is_staggering:				parse_match_to_bool(&packed_strs, 47)?
+		};
 
-					target_delay: target_delay,
-					target_effect: target_effect,
-					target_sfx: target_sfx,
-
-					ground_effect: ground_effect,
-					trace_effect: trace_effect,
-
-					screen_represent: screen_represent,
-					is_usable_in_market: is_usable_in_market,
-					is_staggering: is_staggering
-				}
-			)
-		)
+		Result::Ok(entry)
 	}
 
 	pub fn parse_magic_type<'a>(bytes: &'a [u8]) -> Option<MagicType> {
@@ -385,12 +341,12 @@ pub mod parser {
 			let line = bytes_split.get(idx).unwrap();
 
 			match magic_type_entry(&line) {
-				IResult::Done(_, magic_type_entry_parsed) => {
+				Result::Ok(magic_type_entry_parsed) => {
 					entries.push(magic_type_entry_parsed);
 				},
 
-				e => {
-					println!("Error at line {}. Skipped.", idx);
+				Result::Err(entry_idx) => {
+					println!("Error at index {}. Skipped.", idx);
 				}
 			}
 		}
@@ -415,7 +371,7 @@ pub mod parser {
 		macro_rules! assert_magic_type_field_eq {
 			( $str_to_parse:expr, $field:ident, $expected:expr ) => ({
 	    		let magic_type_bytes = String::from($str_to_parse).into_bytes();
-				let (_, parsed_magic_entry) = magic_type_entry(&magic_type_bytes).unwrap();
+				let parsed_magic_entry = magic_type_entry(&magic_type_bytes).unwrap();
 
 				assert_eq!($expected, parsed_magic_entry.$field);
 			})
@@ -823,7 +779,7 @@ pub mod parser {
 		#[test]
 		fn parse_magic_entry_serialize_will_return_initial_line_1() {
 			let magic_type_bytes = String::from(SAMPLE_MAGIC_ENTRY_1).into_bytes();
-			let (_, parsed_magic_entry) = magic_type_entry(&magic_type_bytes).unwrap();
+			let parsed_magic_entry = magic_type_entry(&magic_type_bytes).unwrap();
 			let reserialized_line = parsed_magic_entry.serialize_to_string();
 
 			assert_eq!(SAMPLE_MAGIC_ENTRY_1, reserialized_line);
@@ -832,7 +788,7 @@ pub mod parser {
 		#[test]
 		fn parse_magic_entry_serialize_will_return_initial_line_2() {
 			let magic_type_bytes = String::from(SAMPLE_MAGIC_ENTRY_2).into_bytes();
-			let (_, parsed_magic_entry) = magic_type_entry(&magic_type_bytes).unwrap();
+			let parsed_magic_entry = magic_type_entry(&magic_type_bytes).unwrap();
 			let reserialized_line = parsed_magic_entry.serialize_to_string();
 
 			assert_eq!(SAMPLE_MAGIC_ENTRY_2, reserialized_line);
@@ -841,7 +797,7 @@ pub mod parser {
 		#[test]
 		fn parse_magic_entry_serialize_will_return_initial_line_3() {
 			let magic_type_bytes = String::from(SAMPLE_MAGIC_ENTRY_3).into_bytes();
-			let (_, parsed_magic_entry) = magic_type_entry(&magic_type_bytes).unwrap();
+			let parsed_magic_entry = magic_type_entry(&magic_type_bytes).unwrap();
 			let reserialized_line = parsed_magic_entry.serialize_to_string();
 
 			assert_eq!(SAMPLE_MAGIC_ENTRY_3, reserialized_line);
