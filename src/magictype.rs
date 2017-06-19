@@ -128,6 +128,7 @@ pub mod parser {
 	use datfiles::parser;
 	use datfiles::parser::*;
 	use regex::*;
+	use std::num::ParseIntError;
 
 	use nom::*;
 
@@ -229,18 +230,18 @@ pub mod parser {
     	}
     }
 
-	pub fn magic_type_header(input: &[u8]) -> IResult<&[u8], MagicTypeHeader> {
-    	do_parse!(input,
-    		tag!("Amount=")											>>
-    		amount:				parse_str_fragment_crlfeof_to_u32	>>
+    pub fn magic_type_header<'a>(val: &'a [u8]) -> Result<MagicTypeHeader, ParseIntError> {
+		let val_as_str = String::from_utf8_lossy(val).into_owned();
+    	let reg_parser_items = Regex::new(r"Amount=(\d+)").unwrap();
+    	let captures = reg_parser_items.captures(&val_as_str).unwrap();
+    	let amount_cap = String::from(&captures[1]);
 
-    		(
-    			MagicTypeHeader {
-    				amount: amount
-    			}
-			)
-		)
-	}
+    	let entry = MagicTypeHeader {
+    		amount:						amount_cap.parse::<u32>()?
+    	};
+
+    	Result::Ok(entry)
+    }
 
 	pub fn magic_type_entry<'a>(val: &'a [u8]) -> Result<MagicTypeEntry, usize> {
 		let val_as_str = String::from_utf8_lossy(val).into_owned();
@@ -320,12 +321,12 @@ pub mod parser {
 		match bytes_split.get(0) {
 			Some(line) => {
 				match magic_type_header(&line) {
-					IResult::Done(_, magic_type_header_parsed) => {
+					Result::Ok(magic_type_header_parsed) => {
 						let header = magic_type_header_parsed;
 					},
 
-					e => {
-						println!("Error while matching heaer {:?}", line);
+					Result::Err(err) => {
+						println!("Error while fetching header {:?}", err);
 						return None;
 					}
 				}
@@ -361,7 +362,7 @@ pub mod parser {
 		macro_rules! assert_header_amount_eq {
 			( $str_to_parse:expr, $expected:expr ) => ({
 	    		let header_bytes = String::from($str_to_parse).into_bytes();
-				let (_, parsed_header) = magic_type_header(&header_bytes).unwrap();
+				let parsed_header = magic_type_header(&header_bytes).unwrap();
 
 				assert_eq!($expected, parsed_header.amount);
 			})
@@ -394,7 +395,7 @@ pub mod parser {
 		#[test]
 		fn parse_header_serialize_will_return_initial_header_1() {
 			let header_bytes = String::from(SAMPLE_HEADER_ENTRY_1).into_bytes();
-			let (_, parsed_header) = magic_type_header(&header_bytes).unwrap();
+			let parsed_header = magic_type_header(&header_bytes).unwrap();
 			let reserialized_line = parsed_header.serialize_to_string();
 
 			assert_eq!(SAMPLE_HEADER_ENTRY_1, reserialized_line);
@@ -403,7 +404,7 @@ pub mod parser {
 		#[test]
 		fn parse_header_serialize_will_return_initial_header_2() {
 			let header_bytes = String::from(SAMPLE_HEADER_ENTRY_2).into_bytes();
-			let (_, parsed_header) = magic_type_header(&header_bytes).unwrap();
+			let parsed_header = magic_type_header(&header_bytes).unwrap();
 			let reserialized_line = parsed_header.serialize_to_string();
 
 			assert_eq!(SAMPLE_HEADER_ENTRY_2, reserialized_line);
@@ -412,7 +413,7 @@ pub mod parser {
 		#[test]
 		fn parse_header_serialize_will_return_initial_header_3() {
 			let header_bytes = String::from(SAMPLE_HEADER_ENTRY_3).into_bytes();
-			let (_, parsed_header) = magic_type_header(&header_bytes).unwrap();
+			let parsed_header = magic_type_header(&header_bytes).unwrap();
 			let reserialized_line = parsed_header.serialize_to_string();
 
 			assert_eq!(SAMPLE_HEADER_ENTRY_3, reserialized_line);
