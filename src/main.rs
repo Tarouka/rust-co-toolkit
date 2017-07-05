@@ -18,6 +18,7 @@ extern crate clap;
 extern crate serde_json;
 extern crate byteorder;
 extern crate regex;
+extern crate ini;
 
 #[macro_use]
 extern crate serde_derive;
@@ -29,11 +30,12 @@ mod datfiles;
 mod levelexp;
 mod itemtype;
 mod magictype;
+mod monster;
 
 
 fn get_app_usage<'a>() -> ArgMatches<'a> {
     App::new("CO V5165 Toolkit")
-        .version("0.3.1")
+        .version("0.4.0")
         .author("Tarouka <tarouka@openmailbox.org>")
 
         .subcommand(SubCommand::with_name("decrypt_dat")
@@ -74,7 +76,7 @@ fn get_app_usage<'a>() -> ArgMatches<'a> {
             .about("Encodes or decodes an magictype file to a parseable format.")
             
             .subcommand(SubCommand::with_name("decode")
-                .about("Decodes an magictype.dat file to a more workable format.")
+                .about("Decodes a magictype.dat file to a more workable format.")
 
                 .arg(Arg::with_name("output-format").long("output-format").short("o").takes_value(true).possible_values(&["json"]).help("Assumes JSON by default"))
                 .arg(Arg::with_name("decrypt").long("decrypt").short("d").help("The file will be decrypted before processing"))
@@ -83,7 +85,29 @@ fn get_app_usage<'a>() -> ArgMatches<'a> {
             )
 
             .subcommand(SubCommand::with_name("encode")
-                .about("Encodes back an magictype.dat decoded format.")
+                .about("Encodes back a magictype.dat decoded format.")
+
+                .arg(Arg::with_name("FROM_FILE").help("Source filename").required(true))
+                .arg(Arg::with_name("TO_FILE").help("Destination filename").required(true))
+                .arg(Arg::with_name("output-format").long("output-format").short("o").takes_value(true).possible_values(&["json"]).help("Assumes the format from the extension by default"))
+                .arg(Arg::with_name("encrypt").long("encrypt").short("e").help("The file will be encrypted"))
+            )
+        )
+
+        .subcommand(SubCommand::with_name("monster")
+            .about("Encodes or decodes an monster file to a parseable format.")
+            
+            .subcommand(SubCommand::with_name("decode")
+                .about("Decodes a Monster.dat file to a more workable format.")
+
+                .arg(Arg::with_name("output-format").long("output-format").short("o").takes_value(true).possible_values(&["json"]).help("Assumes JSON by default"))
+                .arg(Arg::with_name("decrypt").long("decrypt").short("d").help("The file will be decrypted before processing"))
+                .arg(Arg::with_name("FROM_FILE").help("Source filename").required(true))
+                .arg(Arg::with_name("TO_FILE").help("Destination filename").required(true))
+            )
+
+            .subcommand(SubCommand::with_name("encode")
+                .about("Encodes back a Monster.dat decoded format.")
 
                 .arg(Arg::with_name("FROM_FILE").help("Source filename").required(true))
                 .arg(Arg::with_name("TO_FILE").help("Destination filename").required(true))
@@ -125,6 +149,16 @@ fn main() {
 
         if let Some(matches) = matches.subcommand_matches("encode") {
             commands::exec_magictype_encode(&matches);
+        }
+    }
+
+    else if let Some(matches) = matches.subcommand_matches("monster") {
+        if let Some(matches) = matches.subcommand_matches("decode") {
+            commands::exec_monster_decode(&matches);
+        }
+
+        if let Some(matches) = matches.subcommand_matches("encode") {
+            commands::exec_monster_encode(&matches);
         }
     }
 
@@ -187,6 +221,8 @@ pub fn write_all_bytes(filename: &str, bytes: Vec<u8>) {
 mod commands {
     use super::*;
     use datfiles::parser::ParserSerializable;
+    use ini::Ini;
+    use monster::parser::GetKeyError;
 
 
     struct DecoderArgs<'a> {
@@ -316,6 +352,58 @@ mod commands {
 
         if args.format == "json" {
             encoded_bytes = decoded_file.serialize_to_string().into_bytes();
+        } else {
+            panic!("Unsupported format");
+        }
+
+        let mut bytes_to_write = if args.encrypt { encrypt_cofac_bytes(encoded_bytes) } else { encoded_bytes };
+
+        write_all_bytes(&args.dst_filename, bytes_to_write);
+    }
+
+    pub fn exec_monster_decode<'a>(matches: &'a ArgMatches) {
+        let args = get_decoder_args(matches);
+
+        let src_bytes = if args.decrypt { decrypt_cofac_dat(args.src_filename) } else { read_all_bytes(&args.src_filename) };
+        let str_val = &String::from_utf8_lossy(&src_bytes);
+        println!("{}", str_val);
+        let ini = Ini::load_from_str(str_val).unwrap();
+        let parsed_file = monster::parser::get_all_monster_entries(ini);
+
+        let mut bytes_to_write: Vec<u8> = Vec::new();
+
+        match parsed_file {
+            Ok(monster_entries) => {
+                if args.format == "json" {
+                    bytes_to_write = monster::encoder::decode_monster_to_json(&monster_entries);
+                }
+            },
+
+            Err(GetKeyError::KeyNotFound(err)) => {
+                println!("Key not found: {}", err);
+                panic!("");
+            },
+
+            Err(GetKeyError::FailedToParse(err)) => {
+                println!("Failed to parse: {}", err);
+                panic!("");
+            }
+        }
+
+        write_all_bytes(&args.dst_filename, bytes_to_write);
+    }
+
+    pub fn exec_monster_encode<'a>(matches: &'a ArgMatches) {
+        let args = get_encoder_args(matches);
+
+        let src_bytes = read_all_bytes(&args.src_filename);
+        let decoded_file = monster::encoder::encode_monster_from_json(src_bytes);
+
+        let mut encoded_bytes: Vec<u8> = Vec::new();
+
+        if args.format == "json" {
+            let str_bytes: Vec<String> = decoded_file.iter().map(|bytes| bytes.serialize_to_string() + "\n\n").collect();
+            encoded_bytes = str_bytes.concat().into_bytes();
         } else {
             panic!("Unsupported format");
         }
